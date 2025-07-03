@@ -1,0 +1,128 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: "{{ .Values.app_name }}-{{ .Values.env }}"
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "java8.labels" . | nindent 4 }}
+spec:
+  replicas: {{ .Values.replicas }}
+  selector:
+    matchLabels:
+      app: {{ .Values.app_name }}
+  template:
+    metadata:
+      {{- with .Values.podAnnotations }}
+      annotations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      labels:
+        app: {{ .Values.app_name }}
+        env: {{ .Values.env }}
+        {{- include "java8.labels" . | nindent 8 }}
+        {{- with .Values.podLabels }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+    spec:
+      topologySpreadConstraints:
+      - maxSkew: 1
+        topologyKey: topology.kubernetes.io/zone
+        whenUnsatisfiable: DoNotSchedule
+        labelSelector:
+          matchLabels:
+            app: {{ .Values.app_name }}
+      {{- if .Values.serviceAccount.name }}
+      serviceAccountName: {{ .Values.serviceAccount.name }}
+      {{- end }}
+      {{- if and .Values.graviton .Values.graviton.enabled (eq .Values.graviton.enabled "yes") }}
+      nodeSelector:
+        {{ .Values.graviton.nodeSelectorKey }}: {{ .Values.graviton.nodeSelectorValue }}
+      tolerations:
+        - effect: NoSchedule
+          key: {{ .Values.graviton.nodeSelectorKey }}
+          operator: "Equal"
+          value: {{ .Values.graviton.nodeSelectorValue }}
+      {{- else if or (not .Values.graviton) (eq .Values.graviton.enabled "no") }}
+      {{- end }}
+      containers:
+        - name: {{ .Values.app_name }}
+          env:
+            {{- if eq .Values.vault.token "yes" }}
+            - name: VAULT_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: "{{ .Values.app_name }}-{{ .Values.env }}-hvault-client-token"
+                  key: VAULT_TOKEN_KEY
+            {{- end }}
+            - name: SLEEP_TIME
+              value: "60s"
+            - name: NODE
+              valueFrom:
+                  fieldRef:
+                    fieldPath: status.hostIP
+            - name: OTEL_EXPORTER_OTLP_ENDPOINT
+              value: "http://$(NODE):4317"
+            - name: OTEL_LOGS_EXPORTER
+              value: none
+          image: {{ .Values.image }}
+          imagePullPolicy: {{ .Values.image_pullpolicy }}
+          {{- if .Values.probes.livenessProbe.enabled }}
+          livenessProbe:
+            httpGet:
+              path: {{ .Values.probes.livenessProbe.httpGet.path }}
+              port: {{ .Values.probes.livenessProbe.httpGet.port }}
+            initialDelaySeconds: {{ .Values.probes.livenessProbe.initialDelaySeconds }}
+            periodSeconds: {{ .Values.probes.livenessProbe.periodSeconds }}
+            failureThreshold: {{ .Values.probes.livenessProbe.failureThreshold }}
+            timeoutSeconds: {{ .Values.probes.livenessProbe.timeoutSeconds }}
+            successThreshold: {{ .Values.probes.livenessProbe.successThreshold }}
+          {{- end }}
+          {{- if .Values.probes.readinessProbe.enabled }}
+          readinessProbe:
+            httpGet:
+              path: {{ .Values.probes.readinessProbe.httpGet.path }}
+              port: {{ .Values.probes.readinessProbe.httpGet.port }}
+            initialDelaySeconds: {{ .Values.probes.readinessProbe.initialDelaySeconds }}
+            periodSeconds: {{ .Values.probes.readinessProbe.periodSeconds }}
+            failureThreshold: {{ .Values.probes.readinessProbe.failureThreshold }}
+            timeoutSeconds: {{ .Values.probes.readinessProbe.timeoutSeconds }}
+            successThreshold: {{ .Values.probes.readinessProbe.successThreshold }}
+          {{- end }}
+          lifecycle:
+            preStop:
+              exec:
+                command: ["/bin/sh", "/mnt/prestop.sh"]
+          {{- if .Values.resources }}
+          resources:
+            {{- if .Values.resources.requests }}
+            requests:
+              {{- if .Values.resources.requests.memory }}
+              memory: {{ .Values.resources.requests.memory }}
+              {{- end }}
+              {{- if .Values.resources.requests.cpu }}
+              cpu: {{ .Values.resources.requests.cpu }}
+              {{- end }}
+            {{- end }}
+            {{- if .Values.resources.limits }}
+            limits:
+              {{- if .Values.resources.limits.memory }}
+              memory: {{ .Values.resources.limits.memory }}
+              {{- end }}
+              {{- if .Values.resources.limits.cpu }}
+              cpu: {{ .Values.resources.limits.cpu }}
+              {{- end }}
+            {{- end }}
+          {{- end }}
+          {{- with .Values.volumeMounts }}
+          volumeMounts:
+            - mountPath: /mnt
+              name: prestop-volume
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+      {{- with .Values.volumes }}
+      volumes:
+        - configMap:
+            name: sbox-prestop-script-config
+          name: prestop-volume
+        {{- toYaml . | nindent 8 }}
+      {{- end }}

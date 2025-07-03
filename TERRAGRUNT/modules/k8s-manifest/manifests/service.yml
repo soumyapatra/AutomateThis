@@ -1,0 +1,15 @@
+apiVersion: v1
+data:
+  prestop.sh: |
+    #!/bin/bash
+    sleep $SLEEP_TIME
+    DATE=`date '+%Y-%m-%d-%H%M%S'`
+    HOSTNAME=`hostname`
+    APPLOGS="/var/log/application/*"
+    zip -r /tmp/${DATE}-${HOSTNAME}.zip ${APPLOGS}
+    SERVICE=`echo $HOSTNAME | cut -d'-' -f -2`
+    aws s3 cp /tmp/${DATE}-${HOSTNAME}.zip s3://bucket-prestop-logs/${SERVICE}/
+kind: ConfigMap
+metadata:
+  name: sbox-prestop-script-config-with-sleep
+  namespace: default

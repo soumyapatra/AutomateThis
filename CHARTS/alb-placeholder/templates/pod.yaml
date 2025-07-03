@@ -1,0 +1,14 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: "alb-ingress-pod"
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app: "alb-ingress"
+    {{- include "alb-placeholder.labels" . | nindent 4 }}
+spec:
+  containers:
+    - name: "alb-ingress-pod"
+      image: nginx
+      ports:
+        - containerPort: 80

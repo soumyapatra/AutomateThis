@@ -1,0 +1,2 @@
+domain_name: "example.com"
+certificateArn: "arn:aws:acm:ap-south-1:aws-account-id:certificate/cert-id"

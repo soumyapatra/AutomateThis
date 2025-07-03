@@ -1,0 +1,27 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: "{{ .Values.app_name }}-{{ .Values.env }}-ingress"
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app: {{ .Values.app_name }}
+    {{- include "java8.labels" . | nindent 4 }}
+  annotations:
+    kubernetes.io/ingress.class: "{{ .Values.ingress.class | default "alb" }}"
+    alb.ingress.kubernetes.io/group.name: "{{ .Values.ingress.scheme }}-alb-group"
+spec:
+  rules:
+    {{- range .Values.ingress.hosts }}
+    - host: "{{ $.Values.app_name }}-{{ $.Values.env }}.{{ $.Values.endpoint_domain_name }}"
+      http:
+        paths:
+          {{- range .paths }}
+          - path: {{ .path }}
+            pathType: {{ .pathType | default "ImplementationSpecific" }}
+            backend:
+              service:
+                name: {{ .serviceName | default (printf "%s-%s-svc" $.Values.app_name $.Values.env) }}
+                port:
+                  number: {{ .servicePort | default 80 }}
+          {{- end }}
+    {{- end }}

@@ -1,0 +1,23 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: "{{ .Values.app_name }}-{{ .Values.env }}-svc"
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app: {{ .Values.app_name }}
+    {{- include "java8.labels" . | nindent 4 }}
+    {{- if .Values.service.labels }}
+    {{- toYaml .Values.service.labels | nindent 4 }}
+    {{- end }}
+  {{- if .Values.service.annotations }}
+  annotations:
+    {{- toYaml .Values.service.annotations | nindent 4 }}
+  {{- end }}
+spec:
+  ports:
+  - port: {{ .Values.service.port | default 80 }}
+    targetPort: {{ .Values.service.targetPort | default 80 }}
+    name: http
+  selector:
+    app: {{ .Values.app_name }}
+  type: {{ .Values.service.type | default "NodePort" }}

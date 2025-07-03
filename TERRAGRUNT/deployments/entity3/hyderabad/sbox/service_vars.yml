@@ -1,0 +1,33 @@
+services:
+  urlshortener:
+    deployment:
+      replica_count: "2"
+      name: "urlshortener"
+      image_name: "sbox-urlshortener"
+      image_tag: "dr_test"
+      request_cpu: "600m"
+      request_memory: "2000Mi"
+      service_port: "80"
+      target_port: "9080"
+    hosts:
+    - host: dr.pyfn.in
+      paths:
+      - path: /*
+        path_type: "ImplementationSpecific"
+        service_port: 80
+        service_name: "urlshortener-svc"
+    rds:
+      instance_class: "db.m5.xlarge"
+      db_instance_identifier: "mu-rds-urlshortener-sbox"
+      subdomain: "hyd-rds-urlshortener-sbox123"
+  rule_engine:
+    rds:
+      instance_class: "db.m5.xlarge"
+      db_instance_identifier: "mu-rds-urlshortener-sbox"
+    hosts:
+    - host: dr.pyfn.in
+      paths:
+      - path: /*
+        path_type: "ImplementationSpecific"
+        service_port: 80
+        service_name: "rule_engine-svc"
