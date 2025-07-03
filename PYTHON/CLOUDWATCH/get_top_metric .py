@@ -1,0 +1,237 @@
+import boto3
+from datetime import datetime
+import csv
+from botocore.exceptions import ClientError
+from tqdm import tqdm
+import sys
+
+
+
+starttime = datetime(2020, 8, 17)
+endtime = datetime(2020, 10, 17)
+period = 876000
+
+REGION = "ap-south-1"
+
+
+def get_inst_tag(inst_id, tag_name):
+    try:
+        ec2 = boto3.client('ec2', region_name=REGION)
+
+        response = ec2.describe_tags(Filters=[{'Name': 'resource-id', 'Values': [inst_id]}])
+        #					      {'Name': 'tag:acr_reporting', 'Values': ['false']}
+        #					     ])
+        tags = response['Tags']
+        for tag in tags:
+            if tag['Key'] == tag_name:
+                return tag['Value']
+        return "NA"
+    except ClientError:
+        print("Instance Does not exist")
+        return
+
+
+REGION = "ap-south-1"
+cw = boto3.client('cloudwatch', region_name=REGION)
+FILE = "instance_metric.csv"
+
+col_head = "InstanceID, InstanceName, TOP6, DATE6, TOP5, DATE5, TOP4, DATE4, TOP3, DATE3, TOP2, DATE2, TOP1, DATE1\n"
+col_write = open(FILE, "w")
+col_write.write(col_head)
+col_write.close()
+
+
+def get_cpu_metric(inst_id):
+    metric_list = []
+    response = cw.get_metric_statistics(
+        Namespace='AWS/EC2',
+        MetricName='CPUUtilization',
+        Dimensions=[
+            {
+                'Name': 'InstanceId',
+                'Value': inst_id
+            },
+        ],
+        # StartTime=datetime.now() - timedelta(days=90),
+        # EndTime=datetime.now(),
+        StartTime=starttime,
+        EndTime=endtime,
+        #        Period=1382400,
+        Period=period,
+        Statistics=['Maximum'],
+    )
+    for data in response['Datapoints']:
+        metric_list.append(data)
+
+    # print(metric_list)
+
+    def myFunc(e):
+        return e['Maximum']
+
+    metric_list.sort(key=myFunc, reverse=True)
+
+    def get_item(index, list, key):
+        if len(list) > index:
+            return list[index][key]
+        else:
+            return "Null"
+
+    instance_name = get_inst_tag(inst_id, "Name")
+    acr_tag = get_inst_tag(inst_id, "acr_reporting")
+    with open(FILE, "a") as csvFile:
+        # parsed_data = inst_id,instance_name,metric_list[0]['Maximum'],metric_list[0]['Timestamp'],metric_list[1]['Maximum'],metric_list[1]['Timestamp'],metric_list[2]['Maximum'],metric_list[2]['Timestamp'],metric_list[3]['Maximum'],metric_list[3]['Timestamp'], metric_list[4]['Maximum'],metric_list[4]['Timestamp'],metric_list[5]['Maximum'],metric_list[5]['Timestamp']
+        parsed_data = inst_id, instance_name, get_item(0, metric_list, "Maximum"), get_item(0, metric_list,
+                                                                                            "Timestamp"), get_item(
+            1,
+            metric_list,
+            "Maximum"), get_item(
+            1, metric_list, "Timestamp"), get_item(2, metric_list, "Maximum"), get_item(2, metric_list,
+                                                                                        "Timestamp"), get_item(3,
+                                                                                                               metric_list,
+                                                                                                               "Maximum"), get_item(
+            3, metric_list, "Timestamp"), get_item(4, metric_list, "Maximum"), get_item(4, metric_list,
+                                                                                        "Timestamp"), get_item(5,
+                                                                                                               metric_list,
+                                                                                                               "Maximum"), get_item(
+            5, metric_list, "Timestamp")
+        csvWriter = csv.writer(csvFile)
+        csvWriter.writerow(parsed_data)
+
+
+def get_mem_metric_linux(inst_id):
+    metric_list = []
+    response = cw.get_metric_statistics(
+        Namespace='Linux/Memory',
+        MetricName='MemoryUtilization',
+        Dimensions=[
+            {
+                'Name': 'InstanceId',
+                'Value': inst_id
+            },
+        ],
+        StartTime=starttime,
+        EndTime=endtime,
+        Period=period,
+        Statistics=['Maximum'],
+    )
+    if len(response['Datapoints']) == 0:
+        print("Got empty reponse. Chking cwagent")
+        get_mem_metric_cwagent(inst_id)
+        return
+
+    for data in response['Datapoints']:
+        metric_list.append(data)
+    print(metric_list)
+
+    def myFunc(e):
+        return e['Maximum']
+
+    metric_list.sort(key=myFunc, reverse=True)
+
+    def get_item(index, list, key):
+        if len(list) > index:
+            return list[index][key]
+        else:
+            return "Null"
+
+    instance_name = get_inst_tag(inst_id, "Name")
+    acr_tag = get_inst_tag(inst_id, "acr_reporting")
+    with open(FILE, "a") as csvFile:
+        # parsed_data = inst_id,instance_name,metric_list[0]['Maximum'],metric_list[0]['Timestamp'],metric_list[1]['Maximum'],metric_list[1]['Timestamp'],metric_list[2]['Maximum'],metric_list[2]['Timestamp'],metric_list[3]['Maximum'],metric_list[3]['Timestamp'], metric_list[4]['Maximum'],metric_list[4]['Timestamp'],metric_list[5]['Maximum'],metric_list[5]['Timestamp']
+        parsed_data = inst_id, instance_name, get_item(0, metric_list, "Maximum"), get_item(0, metric_list,
+                                                                                            "Timestamp"), get_item(
+            1,
+            metric_list,
+            "Maximum"), get_item(
+            1, metric_list, "Timestamp"), get_item(2, metric_list, "Maximum"), get_item(2, metric_list,
+                                                                                        "Timestamp"), get_item(3,
+                                                                                                               metric_list,
+                                                                                                               "Maximum"), get_item(
+            3, metric_list, "Timestamp"), get_item(4, metric_list, "Maximum"), get_item(4, metric_list,
+                                                                                        "Timestamp"), get_item(5,
+                                                                                                               metric_list,
+                                                                                                               "Maximum"), get_item(
+            5, metric_list, "Timestamp")
+        csvWriter = csv.writer(csvFile)
+        csvWriter.writerow(parsed_data)
+
+
+def get_mem_metric_cwagent(inst_id):
+    metric_list = []
+    response = cw.get_metric_statistics(
+        Namespace='CWAgent',
+        MetricName='mem_used_percent',
+        Dimensions=[
+            {
+                'Name': 'InstanceId',
+                'Value': inst_id
+            },
+        ],
+        StartTime=starttime,
+        EndTime=endtime,
+        Period=period,
+        Statistics=['Maximum'],
+    )
+
+    for data in response['Datapoints']:
+        print("Got empty response. Trying Cwagent")
+        metric_list.append(data)
+    print(metric_list)
+
+    def myFunc(e):
+        return e['Maximum']
+
+    metric_list.sort(key=myFunc, reverse=True)
+
+    def get_item(index, list, key):
+        if len(list) > index:
+            return list[index][key]
+        else:
+            return "Null"
+
+    instance_name = get_inst_tag(inst_id, "Name")
+    acr_tag = get_inst_tag(inst_id, "acr_reporting")
+    with open(FILE, "a") as csvFile:
+        # parsed_data = inst_id,instance_name,metric_list[0]['Maximum'],metric_list[0]['Timestamp'],metric_list[1]['Maximum'],metric_list[1]['Timestamp'],metric_list[2]['Maximum'],metric_list[2]['Timestamp'],metric_list[3]['Maximum'],metric_list[3]['Timestamp'], metric_list[4]['Maximum'],metric_list[4]['Timestamp'],metric_list[5]['Maximum'],metric_list[5]['Timestamp']
+        parsed_data = inst_id, instance_name, get_item(0, metric_list, "Maximum"), get_item(0, metric_list,
+                                                                                            "Timestamp"), get_item(
+            1,
+            metric_list,
+            "Maximum"), get_item(
+            1, metric_list, "Timestamp"), get_item(2, metric_list, "Maximum"), get_item(2, metric_list,
+                                                                                        "Timestamp"), get_item(3,
+                                                                                                               metric_list,
+                                                                                                               "Maximum"), get_item(
+            3, metric_list, "Timestamp"), get_item(4, metric_list, "Maximum"), get_item(4, metric_list,
+                                                                                        "Timestamp"), get_item(5,
+                                                                                                               metric_list,
+                                                                                                               "Maximum"), get_item(
+            5, metric_list, "Timestamp")
+        csvWriter = csv.writer(csvFile)
+        csvWriter.writerow(parsed_data)
+
+
+# get_cpu_metric("i-0cb022e14f77fa34d")
+
+
+def get_instance_ids(region):
+    ec2 = boto3.resource('ec2', region_name=region)
+    running_instances = ec2.instances.all()
+    #    running_instances = ec2.instances.filter(Filters=[{
+    #        'Name': 'instance-state-name',
+    #        'Values': ['running']}])
+    ids = []
+    for instance in running_instances:
+        ids.append(instance.id)
+    return ids
+
+
+instance_ids = get_instance_ids(REGION)
+
+# for instance in instance_ids:
+#    get_cpu_metric(instance)
+# get_mem_metric_linux(instance)
+# get_mem_metric_cwagent(instance)
+
+for instance in tqdm(instance_ids):
+    get_cpu_metric(instance)

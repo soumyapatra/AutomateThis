@@ -1,0 +1,25 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: "internal-alb-ingress"
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "alb-placeholder.labels" . | nindent 4 }}
+  annotations:
+    kubernetes.io/ingress.class: "alb"
+    alb.ingress.kubernetes.io/group.name: "internal-alb-group"
+    alb.ingress.kubernetes.io/scheme: "internal"
+    alb.ingress.kubernetes.io/target-type: "instance"
+    alb.ingress.kubernetes.io/listen-ports: '[{"HTTP": 80}]'
+spec:
+  rules:
+    - host: "{{ .Release.Name }}-int.{{ .Values.domain_name }}"
+      http:
+        paths:
+          - path: /*
+            pathType: ImplementationSpecific
+            backend:
+              service:
+                name: "{{ .Release.Name }}-alb-ingress-svc"
+                port:
+                  number: 80

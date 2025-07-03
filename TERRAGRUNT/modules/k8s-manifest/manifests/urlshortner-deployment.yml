@@ -1,0 +1,68 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: sample
+spec:
+  replicas: 2
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 2
+      maxUnavailable: 0%
+  selector:
+    matchLabels:
+      app: urlshortener
+  template:
+    metadata:
+      labels:
+        app: sample
+    spec:
+      terminationGracePeriodSeconds: 120
+      containers:
+        - name: sample
+          env:
+          - name: SLEEP_TIME
+            value: "60s"
+          image: sbox-sample:dr_test
+          livenessProbe:
+            failureThreshold: 3
+            httpGet:
+              path: /healthcheck
+              port: 9080
+              scheme: HTTP
+            initialDelaySeconds: 50
+            periodSeconds: 30
+            successThreshold: 1
+            timeoutSeconds: 100
+          readinessProbe:
+            failureThreshold: 3
+            httpGet:
+              path: /healthcheck
+              port: 9080
+              scheme: HTTP
+            initialDelaySeconds: 50
+            periodSeconds: 30
+            successThreshold: 1
+            timeoutSeconds: 100
+          imagePullPolicy: Always
+          lifecycle:
+            preStop:
+              exec:
+                command: ["/bin/sh", "/mnt/prestop.sh"]
+
+          resources:
+            limits:
+              cpu: 2000m
+              memory: 4000Mi
+            requests:
+              cpu: 600m
+              memory: 2000Mi
+          ports:
+            - containerPort: 9080
+          volumeMounts:
+            - name: prestop-volume
+              mountPath: /mnt
+      volumes:
+        - name: prestop-volume
+          configMap:
+            name: sbox-prestop-script-config-with-sleep
