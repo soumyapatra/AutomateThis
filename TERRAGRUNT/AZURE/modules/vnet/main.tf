@@ -1,19 +1,24 @@
-############################
-# Locals
-############################
+
+
+########################################
+# Locals - Subnet Calculation
+########################################
+
 locals {
+  # Public subnets start from index 0
   public_subnets = [
-    for i, cidr in var.public_subnet_cidrs : {
+    for i in range(var.public_subnet_count) : {
       name           = "public-subnet-${i + 1}"
-      address_prefix = cidr
+      address_prefix = cidrsubnet(var.vnet_cidr, 4, i) # /24 each
       type           = "public"
     }
   ]
 
+  # Private subnets continue after public
   private_subnets = [
-    for i, cidr in var.private_subnet_cidrs : {
+    for i in range(var.private_subnet_count) : {
       name           = "private-subnet-${i + 1}"
-      address_prefix = cidr
+      address_prefix = cidrsubnet(var.vnet_cidr, 4, i + var.public_subnet_count)
       type           = "private"
     }
   ]
@@ -21,19 +26,20 @@ locals {
   all_subnets = concat(local.public_subnets, local.private_subnets)
 }
 
-############################
-# VNet
-############################
+
+########################################
+# Networking Resources
+########################################
+
+# Virtual Network
 resource "azurerm_virtual_network" "vnet" {
   name                = var.vnet_name
   resource_group_name = var.resource_group_name
   location            = var.location
-  address_space       = var.address_space
+  address_space       = [var.vnet_cidr]
 }
 
-############################
 # Subnets
-############################
 resource "azurerm_subnet" "subnets" {
   for_each = { for subnet in local.all_subnets : subnet.name => subnet }
 
@@ -43,60 +49,66 @@ resource "azurerm_subnet" "subnets" {
   address_prefixes     = [each.value.address_prefix]
 }
 
-############################
-# Public IP for NAT Gateway
-############################
-resource "azurerm_public_ip" "nat_gw_ip" {
-  name                = "${var.vnet_name}-nat-ip"
-  location            = var.location
-  resource_group_name = var.resource_group_name
-  allocation_method   = "Static"
-  sku                 = "Standard"
-}
+########################################
+# Public Subnet Routing
+########################################
 
-############################
-# NAT Gateway
-############################
-resource "azurerm_nat_gateway" "nat_gw" {
-  name                = "${var.vnet_name}-nat-gw"
-  location            = var.location
-  resource_group_name = var.resource_group_name
-  sku_name            = "Standard"
-}
-
-resource "azurerm_nat_gateway_public_ip_association" "nat_gw_assoc" {
-  nat_gateway_id       = azurerm_nat_gateway.nat_gw.id
-  public_ip_address_id = azurerm_public_ip.nat_gw_ip.id
-}
-
-############################
-# Associate NAT GW with Private Subnets
-############################
-resource "azurerm_subnet_nat_gateway_association" "private_assoc" {
-  for_each      = { for subnet in local.private_subnets : subnet.name => subnet }
-  subnet_id     = azurerm_subnet.subnets[each.key].id
-  nat_gateway_id = azurerm_nat_gateway.nat_gw.id
-}
-
-############################
-# Route Table for Public Subnets
-############################
-resource "azurerm_route_table" "public_rt" {
+# Route table for public subnets (internet-facing)
+resource "azurerm_route_table" "public" {
   name                = "${var.vnet_name}-public-rt"
   location            = var.location
   resource_group_name = var.resource_group_name
 }
 
-resource "azurerm_route" "internet_route" {
-  name                   = "default-internet"
+# Default route to Internet
+resource "azurerm_route" "public_internet" {
+  name                   = "public-internet-route"
   resource_group_name    = var.resource_group_name
-  route_table_name       = azurerm_route_table.public_rt.name
+  route_table_name       = azurerm_route_table.public.name
   address_prefix         = "0.0.0.0/0"
   next_hop_type          = "Internet"
 }
 
-resource "azurerm_subnet_route_table_association" "public_assoc" {
-  for_each        = { for subnet in local.public_subnets : subnet.name => subnet }
-  subnet_id       = azurerm_subnet.subnets[each.key].id
-  route_table_id  = azurerm_route_table.public_rt.id
+# Associate route table with each public subnet
+resource "azurerm_subnet_route_table_association" "public" {
+  for_each = { for s in local.public_subnets : s.name => s }
+
+  subnet_id      = azurerm_subnet.subnets[each.key].id
+  route_table_id = azurerm_route_table.public.id
 }
+
+
+########################################
+# Private Subnet Routing via NAT
+########################################
+
+# Public IP for NAT Gateway
+resource "azurerm_public_ip" "nat" {
+  name                = "${var.vnet_name}-nat-ip"
+  resource_group_name = var.resource_group_name
+  location            = var.location
+  allocation_method   = "Static"
+  sku                 = "Standard"
+}
+
+# NAT Gateway
+resource "azurerm_nat_gateway" "nat" {
+  name                = "${var.vnet_name}-natgw"
+  resource_group_name = var.resource_group_name
+  location            = var.location
+  sku_name            = "Standard"
+#For production AKS or mission-critical workloads:
+#Always use zones = ["1", "2", "3"] for zone-redundant NAT Gateway.
+#For dev/test or cost-saving scenarios:
+#zones = ["1"] is fine, even if workloads are spread across zones. Azure networking handles it.
+  zones                   = [1]
+}
+
+# Associate NAT Gateway with private subnets
+resource "azurerm_subnet_nat_gateway_association" "private" {
+  for_each = { for s in local.private_subnets : s.name => s }
+
+  subnet_id      = azurerm_subnet.subnets[each.key].id
+  nat_gateway_id = azurerm_nat_gateway.nat.id
+}
+
