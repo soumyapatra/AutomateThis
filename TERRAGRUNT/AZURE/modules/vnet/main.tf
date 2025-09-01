@@ -8,7 +8,7 @@ locals {
   # Public subnets start from index 0
   public_subnets = [
     for i in range(var.public_subnet_count) : {
-      name           = "public-subnet-${i + 1}"
+      name           = "${var.var.vnet_name}-public-subnet-${i + 1}"
       address_prefix = cidrsubnet(var.vnet_cidr, 4, i) # /24 each
       type           = "public"
     }
@@ -17,7 +17,7 @@ locals {
   # Private subnets continue after public
   private_subnets = [
     for i in range(var.private_subnet_count) : {
-      name           = "private-subnet-${i + 1}"
+      name           = "${var.var.vnet_name}-private-subnet-${i + 1}"
       address_prefix = cidrsubnet(var.vnet_cidr, 4, i + var.public_subnet_count)
       type           = "private"
     }

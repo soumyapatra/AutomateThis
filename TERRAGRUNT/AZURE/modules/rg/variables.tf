@@ -3,7 +3,7 @@ variable "resource_group_name" {
   type        = string
 }
 
-variable "location" {
+variable "region_code" {
   description = "The Azure region where the resource group will be created"
   type        = string
   default     = "eastus"
