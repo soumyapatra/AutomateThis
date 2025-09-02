@@ -4,27 +4,24 @@ terraform {
 
 locals {
   # Automatically load environment-level variables
-  environment_vars = read_terragrunt_config(find_in_parent_folders("env.hcl"))
-  regional_vars = read_terragrunt_config(find_in_parent_folders("regional.hcl"))
-  common_vars = read_terragrunt_config(find_in_parent_folders("common.hcl"))
-  project_vars = read_terragrunt_config(find_in_parent_folders("project.hcl"))
+  env_vars = read_terragrunt_config(find_in_parent_folders("env_vars.hcl"))
+  regional_vars = read_terragrunt_config(find_in_parent_folders("regional_vars.hcl"))
+  common_vars = read_terragrunt_config(find_in_parent_folders("common_vars.hcl"))
+  project_vars = read_terragrunt_config(find_in_parent_folders("project_vars.hcl"))
 
-  # Extract out common variables for reuse
-  env = local.environment_vars.locals.environment
-  aws_region = local.regional_vars.locals.aws_region
-  region_prefix_map = local.common_vars.locals.region_prefix_map
-  region_prefix = local.region_prefix_map[local.aws_region]
   project_name = local.project_vars.locals.project_name
-  project_prefix = local.common_vars.locals.project_prefix_map[local.project_name]
-  component = "sg"
-  service_name = local.common_vars.locals.service_name
-  name = join("-", compact([local.region_prefix, local.component, local.project_prefix, local.env]))
-  bastion_public_ip_list = local.common_vars.locals.bastion_public_ip_list
-  prod_sg_id = try(local.environment_vars.locals.prod_sg_id, local.common_vars.locals.prod_sg_id)
-  prod_sg = try(local.environment_vars.locals.prod_sg, local.common_vars.locals.prod_sg)
+  region = local.regional_vars.locals.region_code
+  env = local.env_vars.locals.env_name
+  aks_name = join("-", compact([local.project_name, local.region, local.env, "AKS"]))
+  dns_prefix = join("-", compact([local.project_name, local.region, local.env]))
+  network_cidr = local.env_vars.locals.network_cidr
+  kubernetes_version = local.common_vars.locals.kubernetes_version
+  node_count = local.common_vars.locals.node_count
+  vm_size = local.common_vars.locals.vm_size
+
 }
-dependency "vpc" {
-  config_path = "../vpc"
+dependency "network" {
+  config_path = "../network"
 
   # Configure mock outputs for the `validate` command that are returned when there are no outputs available (e.g the
   # module hasn't been applied yet.
@@ -47,11 +44,12 @@ dependency "vpc" {
 #}
 
 inputs = {
-    vpc_id = dependency.vpc.outputs.vpc_id
-    bastion_sg_id = dependency.vpc.outputs.bastion_sg_id
-    name = "${local.name}"
-    bastion_public_ip_list = local.bastion_public_ip_list
-    prod_sg_id = local.prod_sg_id
-    prod_sg = local.prod_sg
-#    eks_sg_id = local.eks_sg_id
+  resource_group_name = dependency.network.outputs.rg_name
+  location = dependency.network.outputs.location
+  private_subnet_ids = dependency.network.private_subnet_ids
+  dns_prefix = local.dns_prefix
+  aks_name = local.aks_name
+  kubernetes_version = local.kubernetes_version
+  node_count = local.node_count
+  vm_size = local.vm_size
 }
