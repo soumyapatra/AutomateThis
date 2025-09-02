@@ -14,4 +14,5 @@ module "vnet" {
     vnet_cidr = var.network_cidr
     private_subnet_count =  var.private_subnet_count
     public_subnet_count = var.public_subnet_count
+    depends_on = [ module.rg ]
 }

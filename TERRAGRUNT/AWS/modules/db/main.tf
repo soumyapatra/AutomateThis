@@ -29,7 +29,7 @@ module rds {
 
 resource "aws_db_subnet_group" "db_subnet" { 
   name       = "${var.name}_db_subnet_group" 
-  subnet_ids = "${var.db_subnets}"
+  subnet_ids = var.db_subnets
 }
 
 

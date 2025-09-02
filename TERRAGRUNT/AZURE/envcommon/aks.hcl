@@ -27,8 +27,12 @@ dependency "network" {
   # module hasn't been applied yet.
   mock_outputs_allowed_terraform_commands = ["validate","plan","init"]
   mock_outputs = {
-    vpc_id = "fake-vpc-id"
-    bastion_sg_id = "fake-sg-id"
+    rg_name = "fake-rg-name"
+    location = "fake-location"
+    vnet_name = "fake-vnet-name"
+    vnet_cidr = "fake-vnet-cidr"
+    private_subnet_count = "fake-pub-sub-count"
+    public_subnet_count = "fake-private-sub-count"
   }
 }
 
