@@ -43,10 +43,10 @@ EOF
 }
 
 locals {
-  region_vars = read_terragrunt_config(find_in_parent_folders("regional.hcl"))
-  environment_vars = read_terragrunt_config(find_in_parent_folders("env.hcl"))
-  project_vars = read_terragrunt_config(find_in_parent_folders("project.hcl"))
-  common_vars = read_terragrunt_config(find_in_parent_folders("common.hcl"))
+  region_vars = read_terragrunt_config(find_in_parent_folders("regional_vars.hcl"))
+  environment_vars = read_terragrunt_config(find_in_parent_folders("env_vars.hcl"))
+  project_vars = read_terragrunt_config(find_in_parent_folders("project_vars.hcl"))
+  common_vars = read_terragrunt_config(find_in_parent_folders("common_vars.hcl"))
 }
 
 inputs = merge(
